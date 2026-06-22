@@ -87,7 +87,9 @@ export class CacheService {
   }
 
   buildKey(prefix: CacheKeyPrefix | string, ...parts: string[]): string {
-    return `${prefix}${parts.join(':')}`;
+    const cleanPrefix = String(prefix).replace(/:+$/, '');
+    const cleanParts = parts.filter((part) => part !== null && part !== undefined && part !== '');
+    return cleanParts.length > 0 ? `${cleanPrefix}:${cleanParts.join(':')}` : cleanPrefix;
   }
 
   private patternToRegex(pattern: string): RegExp {

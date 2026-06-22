@@ -50,7 +50,7 @@ export class FieldUtils {
     removeOriginal = false,
   ): T {
     const result = { ...obj };
-    for (const [source, target] of Object.entries(mapping)) {
+    for (const [target, source] of Object.entries(mapping)) {
       const sourceValue = FieldUtils.nestedGet(obj, source);
       if (sourceValue !== undefined) {
         FieldUtils.nestedSet(result, target, sourceValue);

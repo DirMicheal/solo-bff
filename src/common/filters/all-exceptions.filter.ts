@@ -38,19 +38,21 @@ export class AllExceptionsFilter implements ExceptionFilter {
         code = Number(ErrorCode.ERROR);
       }
 
+      const originalCode = typeof exceptionResponse === 'object' ? (exceptionResponse as any).code : undefined;
+
       if (status === HttpStatus.UNAUTHORIZED) {
-        code = ErrorCode.UNAUTHORIZED;
+        code = originalCode !== undefined ? originalCode : ErrorCode.UNAUTHORIZED;
         message = message || 'Unauthorized';
       } else if (status === HttpStatus.FORBIDDEN) {
-        code = ErrorCode.FORBIDDEN;
+        code = originalCode !== undefined ? originalCode : ErrorCode.FORBIDDEN;
         message = message || 'Forbidden';
       } else if (status === HttpStatus.NOT_FOUND) {
-        code = ErrorCode.NOT_FOUND;
+        code = originalCode !== undefined ? originalCode : ErrorCode.NOT_FOUND;
         message = message || 'Not Found';
       } else if (status === HttpStatus.BAD_REQUEST) {
-        code = ErrorCode.VALIDATION_ERROR;
+        code = originalCode !== undefined ? originalCode : ErrorCode.VALIDATION_ERROR;
       } else if (status === HttpStatus.TOO_MANY_REQUESTS) {
-        code = ErrorCode.RATE_LIMITED;
+        code = originalCode !== undefined ? originalCode : ErrorCode.RATE_LIMITED;
         message = 'Too Many Requests';
       }
     } else if (exception instanceof Error) {

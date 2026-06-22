@@ -142,7 +142,7 @@ export class AggregatorService {
       return data;
     }
 
-    let result = { ...data };
+    let result = JSON.parse(JSON.stringify(data));
 
     if (config.include && config.include.length > 0) {
       result = FieldUtils.pick(result, config.include as any[]);
@@ -180,7 +180,8 @@ export class AggregatorService {
         if (sourceValue !== undefined) {
           FieldUtils.nestedSet(result, targetKey, sourceValue);
           appliedMappings.push(`${rule} -> ${targetKey}`);
-          if (rule !== targetKey && !FieldUtils.parsePath(rule).some(p => p.includes('.'))) {
+          const pathParts = FieldUtils.parsePath(rule);
+          if (rule !== targetKey && pathParts.length === 1 && !/^\d+$/.test(pathParts[0])) {
             FieldUtils.nestedDelete(result, rule);
           }
         } else {
