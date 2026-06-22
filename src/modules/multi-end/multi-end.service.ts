@@ -25,10 +25,26 @@ export class MultiEndService {
   private adapters: Map<string, EndpointAdapterConfig> = new Map();
 
   getValue<T>(config: MultiEndConfig<T>, clientType: ClientType): T | undefined {
+    if (!config) {
+      this.logger.warn(`MultiEnd config is undefined or null`);
+      return undefined;
+    }
+
     if (config[clientType] !== undefined) {
+      this.logger.debug(`Found config for client type: ${clientType}`);
       return config[clientType];
     }
-    return config.default;
+
+    if (config.default !== undefined) {
+      this.logger.debug(`Using default config for client type: ${clientType}`);
+      return config.default;
+    }
+
+    this.logger.warn(
+      `No config found for client type '${clientType}' and no default provided. ` +
+      `Available client types in config: ${Object.keys(config).join(', ')}`,
+    );
+    return undefined;
   }
 
   adaptDataByClient(
@@ -37,20 +53,72 @@ export class MultiEndService {
     clientType: ClientType,
     adapterService: any,
   ): any {
-    const adapterConfig = this.getValue(fieldAdapters, clientType);
-    if (!adapterConfig) {
+    if (!fieldAdapters) {
+      this.logger.warn(
+        `Multi-end field adapters are undefined. ` +
+        `Skipping adaptation for client type '${clientType}'. Data returned as-is.`,
+      );
       return data;
     }
-    return adapterService.adaptFields(data, adapterConfig, clientType);
+
+    const adapterConfig = this.getValue(fieldAdapters, clientType);
+    if (!adapterConfig) {
+      this.logger.warn(
+        `No field adapter config found for client type '${clientType}'. ` +
+        `Data returned as-is. Available keys: ${Object.keys(fieldAdapters).join(', ')}`,
+      );
+      return data;
+    }
+
+    if (!adapterService || typeof adapterService.adaptFields !== 'function') {
+      this.logger.error(
+        `Invalid adapterService provided. Missing 'adaptFields' method. Data returned as-is.`,
+      );
+      return data;
+    }
+
+    this.logger.debug(
+      `Applying field adapter for client type '${clientType}'. ` +
+      `Config: include=${JSON.stringify(adapterConfig.include)}, ` +
+      `exclude=${JSON.stringify(adapterConfig.exclude)}, ` +
+      `mappingKeys=${adapterConfig.mappings ? Object.keys(adapterConfig.mappings).join(',') : 'none'}`,
+    );
+
+    try {
+      const result = adapterService.adaptFields(data, adapterConfig, clientType);
+      this.logger.debug(
+        `Field adaptation successful for client '${clientType}'. ` +
+        `Input keys: ${Object.keys(data || {}).join(',')}. ` +
+        `Output keys: ${Object.keys(result || {}).join(',')}`,
+      );
+      return result;
+    } catch (error: any) {
+      this.logger.error(
+        `Field adaptation failed for client '${clientType}': ${error.message}. ` +
+        `Falling back to original data.`,
+        error.stack,
+      );
+      return data;
+    }
   }
 
   registerAdapter(endpoint: string, config: EndpointAdapterConfig): void {
     this.adapters.set(endpoint, config);
-    this.logger.log(`Multi-end adapter registered for: ${endpoint}`);
+    this.logger.log(
+      `Multi-end adapter registered for endpoint: ${endpoint}. ` +
+      `Registered adapters count: ${this.adapters.size}`,
+    );
   }
 
   getAdapter(endpoint: string): EndpointAdapterConfig | undefined {
-    return this.adapters.get(endpoint);
+    const adapter = this.adapters.get(endpoint);
+    if (!adapter) {
+      this.logger.debug(
+        `No adapter found for endpoint: ${endpoint}. ` +
+        `Available endpoints: ${Array.from(this.adapters.keys()).join(', ')}`,
+      );
+    }
+    return adapter;
   }
 
   getPageConfig(

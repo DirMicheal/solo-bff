@@ -171,18 +171,24 @@ export class AggregatorService {
     clientType: ClientType,
   ): any {
     const result = { ...data };
+    const appliedMappings: string[] = [];
+    const skippedMappings: string[] = [];
 
     for (const [targetKey, rule] of Object.entries(mappings)) {
       if (typeof rule === 'string') {
         const sourceValue = FieldUtils.nestedGet(data, rule);
         if (sourceValue !== undefined) {
-          result[targetKey] = sourceValue;
-          if (rule !== targetKey && !rule.includes('.')) {
-            delete result[rule];
+          FieldUtils.nestedSet(result, targetKey, sourceValue);
+          appliedMappings.push(`${rule} -> ${targetKey}`);
+          if (rule !== targetKey && !FieldUtils.parsePath(rule).some(p => p.includes('.'))) {
+            FieldUtils.nestedDelete(result, rule);
           }
+        } else {
+          skippedMappings.push(`${rule} -> ${targetKey} (source undefined)`);
         }
       } else {
         if (rule.condition && !rule.condition(data, clientType)) {
+          skippedMappings.push(`${targetKey} (condition not met)`);
           continue;
         }
 
@@ -190,6 +196,9 @@ export class AggregatorService {
 
         if (rule.source) {
           value = FieldUtils.nestedGet(data, rule.source);
+          if (value === undefined) {
+            skippedMappings.push(`${targetKey} (source '${rule.source}' undefined)`);
+          }
         }
 
         if (value === undefined && rule.default !== undefined) {
@@ -197,14 +206,30 @@ export class AggregatorService {
         }
 
         if (rule.transform && value !== undefined) {
-          value = rule.transform(value, data);
+          try {
+            value = rule.transform(value, data);
+          } catch (e: any) {
+            this.logger.error(
+              `Transform function failed for field '${targetKey}': ${e.message}`,
+            );
+            skippedMappings.push(`${targetKey} (transform error)`);
+            continue;
+          }
         }
 
         if (value !== undefined) {
           const target = rule.target || targetKey;
           FieldUtils.nestedSet(result, target, value);
+          appliedMappings.push(`${rule.source || targetKey} -> ${target}`);
         }
       }
+    }
+
+    if (appliedMappings.length > 0) {
+      this.logger.debug(`Applied mappings: ${appliedMappings.join(', ')}`);
+    }
+    if (skippedMappings.length > 0) {
+      this.logger.debug(`Skipped mappings: ${skippedMappings.join(', ')}`);
     }
 
     return result;

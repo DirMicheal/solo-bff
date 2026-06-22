@@ -51,28 +51,138 @@ export class FieldUtils {
   ): T {
     const result = { ...obj };
     for (const [source, target] of Object.entries(mapping)) {
-      if (source in result) {
-        result[target] = result[source];
-        if (removeOriginal) {
-          delete result[source];
+      const sourceValue = FieldUtils.nestedGet(obj, source);
+      if (sourceValue !== undefined) {
+        FieldUtils.nestedSet(result, target, sourceValue);
+        if (removeOriginal && source !== target) {
+          FieldUtils.nestedDelete(result, source);
         }
       }
     }
     return result as T;
   }
 
+  static parsePath(path: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let i = 0;
+
+    while (i < path.length) {
+      const char = path[i];
+
+      if (char === '.') {
+        if (current) {
+          result.push(current);
+          current = '';
+        }
+        i++;
+      } else if (char === '[') {
+        if (current) {
+          result.push(current);
+          current = '';
+        }
+        const endBracket = path.indexOf(']', i);
+        if (endBracket === -1) {
+          throw new Error(`Invalid path syntax: missing closing bracket in "${path}"`);
+        }
+        const indexStr = path.substring(i + 1, endBracket);
+        if (indexStr !== '') {
+          result.push(indexStr);
+        }
+        i = endBracket + 1;
+      } else {
+        current += char;
+        i++;
+      }
+    }
+
+    if (current) {
+      result.push(current);
+    }
+
+    return result;
+  }
+
   static nestedGet(obj: any, path: string): any {
-    return path.split('.').reduce((acc, key) => acc?.[key], obj);
+    if (!obj || !path) return undefined;
+
+    const keys = FieldUtils.parsePath(path);
+
+    let result = obj;
+
+    for (const key of keys) {
+      if (result === null || result === undefined) {
+        return undefined;
+      }
+      if (Array.isArray(result)) {
+        const numKey = Number(key);
+        if (!isNaN(numKey)) {
+          result = result[numKey];
+        } else {
+          return undefined;
+        }
+      } else if (typeof result === 'object') {
+        result = result[key];
+      } else {
+        return undefined;
+      }
+    }
+
+    return result;
   }
 
   static nestedSet(obj: any, path: string, value: any): void {
-    const keys = path.split('.');
+    if (!obj || !path) return;
+
+    const keys = FieldUtils.parsePath(path);
     const lastKey = keys.pop()!;
-    const target = keys.reduce((acc, key) => {
-      if (!acc[key]) acc[key] = {};
-      return acc[key];
-    }, obj);
-    target[lastKey] = value;
+
+    let current = obj;
+
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      const nextKey = i < keys.length - 1 ? keys[i + 1] : lastKey;
+      const nextIsArray = /^\d+$/.test(nextKey);
+
+      if (current[key] === undefined || current[key] === null) {
+        current[key] = nextIsArray ? [] : {};
+      }
+
+      current = current[key];
+    }
+
+    const lastIsArray = /^\d+$/.test(lastKey);
+    if (Array.isArray(current)) {
+      const numKey = Number(lastKey);
+      if (!isNaN(numKey)) {
+        current[numKey] = value;
+      }
+    } else if (typeof current === 'object') {
+      current[lastKey] = value;
+    }
+  }
+
+  static nestedDelete(obj: any, path: string): void {
+    if (!obj || !path) return;
+
+    const keys = FieldUtils.parsePath(path);
+    const lastKey = keys.pop()!;
+
+    let current = obj;
+
+    for (const key of keys) {
+      if (current === null || current === undefined) return;
+      current = current[key];
+    }
+
+    if (Array.isArray(current)) {
+      const numKey = Number(lastKey);
+      if (!isNaN(numKey)) {
+        current.splice(numKey, 1);
+      }
+    } else if (typeof current === 'object' && current !== null) {
+      delete current[lastKey];
+    }
   }
 }
 
